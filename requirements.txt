@@ -1,7 +1,5 @@
 
-
 flask
 pandas
 openpyxl
-gunicorn
-
+plotly

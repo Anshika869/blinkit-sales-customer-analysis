@@ -1,7 +1,7 @@
-
 from flask import Flask, request, send_file
-from io import BytesIO
 import pandas as pd
+import plotly.express as px
+from io import BytesIO
 from html import escape
 
 app = Flask(__name__)
@@ -118,6 +118,124 @@ def home():
     rating_text = (
         f"{avg_rating:.2f} / 5"
         if pd.notna(avg_rating) else "N/A"
+    )
+
+
+
+    # Prepare data for charts
+    chart_df = df.copy()
+
+    chart_df["order_total"] = pd.to_numeric(
+        chart_df["order_total"], errors="coerce"
+    )
+
+    chart_df["rating"] = pd.to_numeric(
+        chart_df["rating"], errors="coerce"
+    )
+
+    chart_df["order_date"] = pd.to_datetime(
+        chart_df["order_date"], errors="coerce"
+    )
+
+    # 1. Monthly Sales Trend
+    monthly = chart_df.dropna(
+        subset=["order_date", "order_total"]
+    ).copy()
+
+    monthly["Month"] = (
+        monthly["order_date"].dt.to_period("M").astype(str)
+    )
+
+    monthly_sales = monthly.groupby(
+        "Month", as_index=False
+    )["order_total"].sum()
+
+    fig1 = px.line(
+        monthly_sales,
+        x="Month",
+        y="order_total",
+        markers=True,
+        title="Monthly Sales Trend",
+        labels={"order_total": "Sales (₹)", "Month": "Month"}
+    )
+
+    # 2. Category-wise Sales
+    category_sales = chart_df.groupby(
+        "category", as_index=False
+    )["order_total"].sum()
+
+    fig2 = px.bar(
+        category_sales,
+        x="category",
+        y="order_total",
+        title="Category-wise Sales",
+        labels={"category": "Category", "order_total": "Sales (₹)"}
+    )
+
+    # 3. Payment Method-wise Sales
+    payment_sales = chart_df.groupby(
+        "payment_method", as_index=False
+    )["order_total"].sum()
+
+    fig3 = px.bar(
+        payment_sales,
+        x="payment_method",
+        y="order_total",
+        title="Payment Method-wise Sales",
+        labels={
+            "payment_method": "Payment Method",
+            "order_total": "Sales (₹)"
+        }
+    )
+
+    # 4. Rating-wise Customer Feedback
+    rating_data = chart_df.dropna(subset=["rating"]).copy()
+    rating_data["Rating"] = (
+        rating_data["rating"].astype(int).astype(str) + " Star"
+    )
+
+    rating_counts = rating_data.groupby(
+        "Rating", as_index=False
+    ).size().rename(columns={"size": "Customers"})
+
+    fig4 = px.bar(
+        rating_counts,
+        x="Rating",
+        y="Customers",
+        title="Rating-wise Customer Feedback"
+    )
+
+    # 5. Sentiment-wise Customer Feedback
+    sentiment_data = chart_df.dropna(
+        subset=["sentiment"]
+    )
+
+    sentiment_counts = sentiment_data.groupby(
+        "sentiment", as_index=False
+    ).size().rename(columns={"size": "Records"})
+
+    fig5 = px.pie(
+        sentiment_counts,
+        names="sentiment",
+        values="Records",
+        title="Sentiment-wise Customer Feedback"
+    )
+
+    # Convert charts into website HTML
+    chart1 = fig1.to_html(
+        full_html=False, include_plotlyjs="cdn"
+    )
+    chart2 = fig2.to_html(
+        full_html=False, include_plotlyjs=False
+    )
+    chart3 = fig3.to_html(
+        full_html=False, include_plotlyjs=False
+    )
+    chart4 = fig4.to_html(
+        full_html=False, include_plotlyjs=False
+    )
+    chart5 = fig5.to_html(
+        full_html=False, include_plotlyjs=False
     )
 
     # Prepare table data
@@ -272,6 +390,25 @@ def home():
             .data-table tr:hover {{ background: #f1f8f1; }}
 
             .note {{ color: #666; margin-top: 25px; }}
+
+
+
+
+            .charts-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}}
+
+        .chart-card {{
+         background: white;
+         padding: 12px;
+         border-radius: 12px;
+         box-shadow: 0 3px 10px #00000012;
+         min-width: 0;
+        overflow: hidden;
+         }}
         </style>
     </head>
 
@@ -334,7 +471,15 @@ def home():
                 </div>
             </form>
         </div>
+        <h2>Sales & Customer Analytics</h2>
 
+    <div class="charts-grid">
+        <div class="chart-card">{chart1}</div>
+        <div class="chart-card">{chart2}</div>
+        <div class="chart-card">{chart3}</div>
+        <div class="chart-card">{chart4}</div>
+        <div class="chart-card">{chart5}</div>
+    </div>
         <h2>Order Details</h2>
         <p>Matching records: {len(df):,}</p>
 
